@@ -74,16 +74,22 @@
 
 #define MAX_XIN_COUNT 16
 
+#define SDE_HW_UBWC_VER(rev) \
+	SDE_HW_VER((((rev) >> 8) & 0xF), (((rev) >> 4) & 0xF), ((rev) & 0xF))
+
 /**
  * Supported UBWC feature versions
  */
 enum {
-	SDE_HW_UBWC_VER_10 = 0x100,
-	SDE_HW_UBWC_VER_20 = 0x200,
-	SDE_HW_UBWC_VER_30 = 0x300,
+	SDE_HW_UBWC_VER_10 = SDE_HW_UBWC_VER(0x100),
+	SDE_HW_UBWC_VER_20 = SDE_HW_UBWC_VER(0x200),
+	SDE_HW_UBWC_VER_30 = SDE_HW_UBWC_VER(0x300),
 };
 
-#define IS_UBWC_20_SUPPORTED(rev)       ((rev) >= SDE_HW_UBWC_VER_20)
+#define IS_UBWC_20_SUPPORTED(rev) \
+		IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_UBWC_VER_20)
+#define IS_UBWC_30_SUPPORTED(rev) \
+		IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_UBWC_VER_30)
 
 /**
  * MDP TOP BLOCK features
@@ -948,6 +954,7 @@ struct sde_perf_cfg {
  * @sui_misr_supported  indicate if secure-ui-misr is supported
  * @sui_block_xin_mask  mask of all the xin-clients to be blocked during
  *                         secure-ui when secure-ui-misr feature is supported
+ * @macrotile_mode     UBWC parameter for macro tile channel distribution
  */
 struct sde_mdss_cfg {
 	u32 hwversion;
@@ -978,6 +985,7 @@ struct sde_mdss_cfg {
 	bool has_idle_pc;
 	u32 vbif_qos_nlvl;
 	u32 ts_prefill_rev;
+	u32 macrotile_mode;
 
 	bool sui_misr_supported;
 	u32 sui_block_xin_mask;
