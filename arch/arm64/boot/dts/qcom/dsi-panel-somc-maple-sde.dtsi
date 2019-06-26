@@ -42,7 +42,36 @@
 			qcom,default-topology-index = <0>;
 			qcom,mdss-dsi-panel-jitter = <0x2 0x1>;
 		};
-		4k60 {
+
+                1080p90 {
+                        qcom,esd-check-enabled;
+                        qcom,mdss-dsi-panel-status-command = [06 01 00 01 05 00 01 0A];
+                        qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
+                        qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+                        qcom,mdss-dsi-panel-status-read-length = <1>;
+                        qcom,mdss-dsi-panel-max-error-count = <3>;
+                        qcom,mdss-dsi-panel-status-value = <0x9c>;
+
+                        qcom,display-topology = <2 0 2>;
+                        qcom,default-topology-index = <0>;
+                        qcom,mdss-dsi-panel-jitter = <0x2 0x1>;
+                };
+
+                1080p120 {
+                        qcom,esd-check-enabled;
+                        qcom,mdss-dsi-panel-status-command = [06 01 00 01 05 00 01 0A];
+                        qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
+                        qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+                        qcom,mdss-dsi-panel-status-read-length = <1>;
+                        qcom,mdss-dsi-panel-max-error-count = <3>;
+                        qcom,mdss-dsi-panel-status-value = <0x9c>;
+
+                        qcom,display-topology = <2 0 2>;
+                        qcom,default-topology-index = <0>;
+                        qcom,mdss-dsi-panel-jitter = <0x2 0x1>;
+                };
+
+		4k {
 			qcom,esd-check-enabled;
 			qcom,mdss-dsi-panel-status-command = [06 01 00 01 05 00 01 0A];
 			qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
@@ -62,7 +91,6 @@
 			qcom,display-topology = <2 2 2>;
 			qcom,default-topology-index = <0>;
 		};
-
 	};
 };
 
