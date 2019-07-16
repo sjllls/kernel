@@ -54,7 +54,7 @@
 
 	chosen {
 		stdout-path = "serial0";
-		bootargs = "sched_enable_hmp=1 rcupdate.rcu_expedited=1";
+		bootargs = "rcupdate.rcu_expedited=1";
 	};
 
 	psci {

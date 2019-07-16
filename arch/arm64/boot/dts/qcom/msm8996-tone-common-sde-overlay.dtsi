@@ -18,8 +18,7 @@
 
 		bootargs = \
 "fpsimd.fpsimd_settings=1 app_setting.use_app_setting=1 \
-app_setting.use_32bit_app_setting=1 sched_enable_hmp=1 \
-rcupdate.rcu_expedited=1 \
+app_setting.use_32bit_app_setting=1 rcupdate.rcu_expedited=1 \
 msm_drm.dsi_display0=dsi_panel_cmd_display:config0";
 
 	};
