@@ -208,6 +208,9 @@ source "drivers/fpga/Kconfig"
 
 source "drivers/firmware/Kconfig"
 
+# anbox
+source "drivers/anbox/Kconfig"
+
 source "drivers/bif/Kconfig"
 
 source "drivers/sensors/Kconfig"
