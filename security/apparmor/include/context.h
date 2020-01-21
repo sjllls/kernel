@@ -191,6 +191,29 @@ static inline struct aa_ns *aa_get_current_ns(void)
 }
 
 /**
+ * aa_current_label - find the current tasks confining label and update it
+ *
+ * Returns: up to date confining label or the ns unconfined label (NOT NULL)
+ *
+ * This fn will update the tasks cred structure if the label has been
+ * replaced.  Not safe to call inside locks
+ */
+static inline struct aa_label *aa_current_label(void)
+{
+	const struct aa_task_ctx *cxt = current_ctx();
+	struct aa_label *label;
+
+	if (label_is_stale(cxt->label)) {
+		label = aa_get_newest_label(cxt->label);
+		aa_replace_current_label(label);
+		aa_put_label(label);
+		cxt = current_ctx();
+	}
+
+	return cxt->label;
+}
+
+/**
  * aa_clear_task_ctx_trans - clear transition tracking info from the ctx
  * @ctx: task context to clear (NOT NULL)
  */
