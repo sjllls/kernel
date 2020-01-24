@@ -504,6 +504,8 @@ static void hci_uart_tty_close(struct tty_struct *tty)
 	struct hci_uart *hu = tty->disc_data;
 	struct hci_dev *hdev;
 
+	return;
+
 	BT_DBG("tty %pK", tty);
 
 	/* Detach from the tty */
