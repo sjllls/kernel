@@ -47,7 +47,7 @@
 #define WRITE_RETRY_CNT 5
 
 /* set this module parameter to enable debug info */
-int bt_dbg_param = 0;
+int bt_dbg_param = 1;
 
 /* Debugging for BT protocol driver */
 #if BTDRV_DEBUG
