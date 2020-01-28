@@ -174,11 +174,11 @@ restart:
 	while ((skb = hci_uart_dequeue(hu))) {
 		int len;
 
-		//if(!bcm43xx_may_use_bluesleep()) {
+		if(!bcm43xx_may_use_bluesleep()) {
 			/* device has been shutdown */
-		//	clear_bit(HCI_UART_SENDING, &hu->tx_state);
-		//	return;
-		//}
+			clear_bit(HCI_UART_SENDING, &hu->tx_state);
+			return;
+		}
 
 		set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
 
@@ -186,7 +186,7 @@ restart:
 
 		len = tty->ops->write(tty, skb->data, skb->len);
 
-		//bcm43xx_done_accessing_bluesleep();
+		bcm43xx_done_accessing_bluesleep();
 
 		hdev->stat.byte_tx += len;
 
