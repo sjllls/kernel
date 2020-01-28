@@ -39,9 +39,7 @@
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
-#ifdef CONFIG_LINE_DISCIPLINE_DRIVER
 #include <linux/timer.h>
-#endif
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/workqueue.h>
@@ -59,8 +57,6 @@
 #include <linux/of_gpio.h>
 #include <linux/serial_core.h>
 #include <linux/platform_data/msm_serial_hs.h>
-
-#include <linux/msm-bus.h>
 
 #include <net/bluetooth/bluesleep.h>
 #include <net/bluetooth/bluetooth.h>
@@ -84,7 +80,8 @@
 #define HS_UART_OFF 0
 #define BT_PORT_ID	0
 
-#define BT_BLUEDROID_SUPPORT 1
+/* this define currently has no effect */
+#define BT_BLUEDROID_SUPPORT 0
 enum {
 	DEBUG_USER_STATE = 1U << 0,
 	DEBUG_SUSPEND = 1U << 1,
@@ -107,8 +104,6 @@ struct bluesleep_info {
 	unsigned host_wake_irq;
 	struct uart_port *uport;
 	struct wake_lock wake_lock;
-	struct msm_bus_scale_pdata *msm_bus_tbl;
-	u32 msm_bus_perf;
 	int irq_polarity;
 	int has_ext_wake;
 	atomic_t wakeup_irq_disabled;
@@ -126,8 +121,8 @@ DECLARE_DELAYED_WORK(sleep_workqueue, bluesleep_sleep_work);
 #define bluesleep_rx_idle()     schedule_delayed_work(&sleep_workqueue, 0)
 #define bluesleep_tx_idle()     schedule_delayed_work(&sleep_workqueue, 0)
 
-/* 1 second timeout */
-#define TX_TIMER_INTERVAL 1
+/* 5 second timeout */
+#define TX_TIMER_INTERVAL  5
 
 /* state variable names and bit positions */
 #define BT_PROTO	0x01
@@ -159,7 +154,7 @@ static unsigned long flags;
 /** Tasklet to respond to change in hostwake line */
 static struct tasklet_struct hostwake_task;
 
-#ifdef CONFIG_LINE_DISCIPLINE_DRIVER
+#if defined(CONFIG_LINE_DISCIPLINE_DRIVER)
 /** Transmission timer */
 static void bluesleep_tx_timer_expire(unsigned long data);
 static DEFINE_TIMER(tx_timer, bluesleep_tx_timer_expire, 0, 0);
@@ -170,10 +165,6 @@ static spinlock_t rw_lock;
 
 /** State variable: whether uart clock is turned on by bluesleep. */
 static atomic_t uart_is_on = ATOMIC_INIT(0);
-
-/* Initially the vote up state is unknown */
-static int bus_vote_up = -1;
-static DEFINE_MUTEX(bus_vote_up_lock);
 
 struct proc_dir_entry *bluetooth_dir, *sleep_dir;
 
@@ -227,32 +218,6 @@ static void enable_wakeup_irq(int enable)
 	}
 }
 
-static int bluesleep_vote_bus(bool enable)
-{
-	int ret = 0;
-
-	if (!bsi->msm_bus_perf)
-		return -ENODEV;
-
-	mutex_lock(&bus_vote_up_lock);
-
-	/* Already voted ? */
-	if (bus_vote_up == (int)enable) {
-		mutex_unlock(&bus_vote_up_lock);
-		return 0;
-	}
-
-	ret = msm_bus_scale_client_update_request(
-				bsi->msm_bus_perf, (int)enable);
-	if (ret)
-		pr_err("bus scale request failure: %d\n", ret);
-	else
-		bus_vote_up = (int)enable;
-
-	mutex_unlock(&bus_vote_up_lock);
-	return ret;
-}
-
 /**
  * @return 1 if the Host can go to sleep, 0 otherwise.
  */
@@ -287,8 +252,7 @@ static void bluesleep_sleep_work(struct work_struct *work)
 			/* UART clk is not turned off immediately. Release
 			 * wakelock after 500 ms.
 			 */
-			wake_lock_timeout(&bsi->wake_lock, msecs_to_jiffies(500));
-			bluesleep_vote_bus(false);
+			wake_lock_timeout(&bsi->wake_lock, HZ / 2);
 		} else {
 			pr_err("This should never happen.\n");
 			return;
@@ -307,8 +271,6 @@ static void bluesleep_sleep_work(struct work_struct *work)
 				gpio_set_value(bsi->ext_wake, 1);
 			clear_bit(BT_EXT_WAKE, &flags);
 		}
-
-		bluesleep_vote_bus(true);
 
 		enable_wakeup_irq(0);
 		hsuart_power(HS_UART_ON);
@@ -348,9 +310,8 @@ void bluesleep_outgoing_data(void)
 
 	spin_lock_irqsave(&rw_lock, irq_flags);
 
-#ifdef CONFIG_LINE_DISCIPLINE_DRIVER
-	mod_timer(&tx_timer, jiffies +
-			msecs_to_jiffies(TX_TIMER_INTERVAL * 1000));
+#if defined(CONFIG_LINE_DISCIPLINE_DRIVER)
+	mod_timer(&tx_timer, jiffies + (TX_TIMER_INTERVAL * HZ));
 	set_bit(BT_TXDATA, &flags);
 #endif
 
@@ -372,8 +333,6 @@ void bluesleep_outgoing_data(void)
 	}
 
 	spin_unlock_irqrestore(&rw_lock, irq_flags);
-
-	bluesleep_vote_bus(true);
 
 	enable_wakeup_irq(0);
 
@@ -398,13 +357,13 @@ void bluesleep_tx_allow_sleep(void)
 	spin_lock_irqsave(&rw_lock, irq_flags);
 
 #ifdef CONFIG_LINE_DISCIPLINE_DRIVER
-	mod_timer(&tx_timer, jiffies +
-			msecs_to_jiffies(TX_TIMER_INTERVAL * 1000));
+	mod_timer(&tx_timer, jiffies + (TX_TIMER_INTERVAL*HZ));
 	clear_bit(BT_TXDATA, &flags);
 #else
 	if (bsi->has_ext_wake == 1)
 		gpio_set_value(bsi->ext_wake, 0);
 	set_bit(BT_EXT_WAKE, &flags);
+
 	bluesleep_tx_idle();
 #endif
 
@@ -412,11 +371,11 @@ void bluesleep_tx_allow_sleep(void)
 }
 EXPORT_SYMBOL(bluesleep_tx_allow_sleep);
 
+#if defined(CONFIG_LINE_DISCIPLINE_DRIVER)
 /**
  * Handles reception timer expiration.
  * @param data Not used.
  */
-#ifdef CONFIG_LINE_DISCIPLINE_DRIVER
 static void bluesleep_tx_timer_expire(unsigned long data)
 {
 	unsigned long irq_flags;
@@ -438,8 +397,7 @@ static void bluesleep_tx_timer_expire(unsigned long data)
 	} else {
 		if (debug_mask & DEBUG_SUSPEND)
 			pr_info("Tx data during last period\n");
-		mod_timer(&tx_timer, jiffies +
-				msecs_to_jiffies(TX_TIMER_INTERVAL * 1000));
+		mod_timer(&tx_timer, jiffies + (TX_TIMER_INTERVAL*HZ));
 	}
 	/* clear the incoming data flag */
 	clear_bit(BT_TXDATA, &flags);
@@ -489,19 +447,21 @@ int bluesleep_start(bool is_clock_enabled)
 		gpio_set_value(bsi->ext_wake, 1);
 	clear_bit(BT_EXT_WAKE, &flags);
 
+#if defined(CONFIG_LINE_DISCIPLINE_DRIVER)
 	clear_bit(BT_TXDATA, &flags);
+#endif
+
 	clear_bit(BT_ASLEEP, &flags);
 
 	spin_unlock_irqrestore(&rw_lock, irq_flags);
 
 	// For ldisc-controlled BT, the clock is enabled by upper layers, so
 	// make bluesleep aware of this state.
-	if (is_clock_enabled)
+	if(is_clock_enabled) {
 		atomic_set(&uart_is_on, 1);
-#ifdef CONFIG_LINE_DISCIPLINE_DRIVER
-	else
+	} else {
 		hsuart_power(HS_UART_ON);
-#endif
+	}
 
 	enable_wakeup_irq(1);
 	set_bit(BT_PROTO, &flags);
@@ -532,7 +492,7 @@ void bluesleep_stop(void)
 	set_bit(BT_EXT_WAKE, &flags);
 	clear_bit(BT_PROTO, &flags);
 
-#ifdef CONFIG_LINE_DISCIPLINE_DRIVER
+#if defined(CONFIG_LINE_DISCIPLINE_DRIVER)
 	del_timer(&tx_timer);
 #endif
 
@@ -544,11 +504,14 @@ void bluesleep_stop(void)
 		spin_unlock_irqrestore(&rw_lock, irq_flags);
 	}
 
+#if defined(CONFIG_LINE_DISCIPLINE_DRIVER)
 	atomic_set(&uart_is_on, 0);
+#endif
+
 	atomic_dec(&open_count);
 
 	enable_wakeup_irq(0);
-	wake_lock_timeout(&bsi->wake_lock, msecs_to_jiffies(500));
+	wake_lock_timeout(&bsi->wake_lock, HZ / 2);
 }
 EXPORT_SYMBOL(bluesleep_stop);
 
@@ -660,17 +623,6 @@ static int bluesleep_probe(struct platform_device *pdev)
 		}
 	}
 
-	bsi->msm_bus_tbl = msm_bus_cl_get_pdata(pdev);
-	if (bsi->msm_bus_tbl) {
-		bsi->msm_bus_perf = msm_bus_scale_register_client(
-							bsi->msm_bus_tbl);
-		if (bsi->msm_bus_perf == 0) {
-			pr_err("Error configuring MSM bus client. Bus voting "
-				"will be unavailable.\n");
-			bsi->msm_bus_tbl = NULL;
-		}
-	}
-
 	/* configure host_wake as input */
 	ret = gpio_request_one(bsi->host_wake, GPIOF_IN, "bt_host_wake");
 	if (ret < 0) {
@@ -718,13 +670,11 @@ static int bluesleep_probe(struct platform_device *pdev)
 	}
 
 	bsi->uport = msm_hs_get_uart_port(BT_PORT_ID);
-	if (IS_ERR_OR_NULL(bsi->uport)) {
-		ret = -EPROBE_DEFER;
-		goto free_bt_ext_wake;
-	}
 
-	enable_wakeup_irq(0);
-
+	/* otherwise we get an unbalanced irq enable */
+	/* when bluetooth is enabled for the first time. */
+	disable_irq(bsi->host_wake_irq);
+	atomic_set(&bsi->wakeup_irq_disabled, 1);
 	return 0;
 
 free_bt_ext_wake:
@@ -927,15 +877,13 @@ static int __init bluesleep_init(void)
 
 	/* Initialize spinlock. */
 	spin_lock_init(&rw_lock);
-
-#ifdef CONFIG_LINE_DISCIPLINE_DRIVER
+#if defined(CONFIG_LINE_DISCIPLINE_DRIVER)
 	/* Initialize timer */
 	init_timer(&tx_timer);
 	tx_timer.function = bluesleep_tx_timer_expire;
 	tx_timer.data = 0;
 	clear_bit(BT_TXDATA, &flags);
 #endif
-
 	/* initialize host wake tasklet */
 	tasklet_init(&hostwake_task, bluesleep_hostwake_task, 0);
 
@@ -961,7 +909,7 @@ static void __exit bluesleep_exit(void)
 		if (disable_irq_wake(bsi->host_wake_irq))
 			pr_err("Couldn't disable hostwake IRQ wakeup mode");
 		free_irq(bsi->host_wake_irq, NULL);
-#ifdef CONFIG_LINE_DISCIPLINE_DRIVER
+#if defined(CONFIG_LINE_DISCIPLINE_DRIVER)
 		del_timer(&tx_timer);
 #endif
 		if (!test_bit(BT_ASLEEP, &flags))

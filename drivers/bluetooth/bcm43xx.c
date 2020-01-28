@@ -27,6 +27,8 @@
 #include <linux/platform_device.h>
 #include <linux/rfkill.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/interrupt.h>
 #ifdef CONFIG_BT_MSM_SLEEP
 #include <net/bluetooth/bluesleep.h>
 #endif
@@ -45,7 +47,25 @@ struct bcm43xx_data {
 
 static struct bcm43xx_data *bcm43xx_my_data;
 static struct rfkill *bt_rfkill;
-static bool bt_enabled;
+static DEFINE_RWLOCK(bcm43xx_lock);
+
+bool bcm43xx_may_use_bluesleep(void)
+{
+	read_lock(&bcm43xx_lock);
+
+	if(!gpio_get_value(bcm43xx_my_data->reg_on_gpio)) {
+		read_unlock(&bcm43xx_lock);
+		pr_info("bluesleep may not be used");
+		return false;
+	}
+
+	return true;
+}
+
+void bcm43xx_done_accessing_bluesleep(void)
+{
+        read_unlock(&bcm43xx_lock);
+}
 
 static int bcm43xx_bt_rfkill_set_power(void *data, bool blocked)
 {
@@ -62,10 +82,12 @@ static int bcm43xx_bt_rfkill_set_power(void *data, bool blocked)
 				regOnGpio);
 			return 0;
 		}
+		write_lock(&bcm43xx_lock);
 		gpio_set_value(bcm43xx_my_data->reg_on_gpio, 1);
+		write_unlock(&bcm43xx_lock);
 
 #if defined(CONFIG_BT_MSM_SLEEP)
-		bluesleep_start(1);
+		bluesleep_start(0);
 #endif
 	} else {
 		if (!regOnGpio) {
@@ -73,13 +95,14 @@ static int bcm43xx_bt_rfkill_set_power(void *data, bool blocked)
 				regOnGpio);
 			return 0;
 		}
+		write_lock(&bcm43xx_lock);
 		gpio_set_value(bcm43xx_my_data->reg_on_gpio, 0);
+		write_unlock(&bcm43xx_lock);
 
 #if defined(CONFIG_BT_MSM_SLEEP)
 		bluesleep_stop();
 #endif
 	}
-	bt_enabled = !blocked;
 
 	return 0;
 }
@@ -155,6 +178,8 @@ static int bcm43xx_bluetooth_probe(struct platform_device *pdev)
 
 	struct device_node *of_node = pdev->dev.of_node;
 	dev_dbg(&pdev->dev, "bcm43xx bluetooth driver being loaded\n");
+
+	rwlock_init(&bcm43xx_lock);
 
 	if (!of_node) {
 		dev_err(&pdev->dev, "%s(): of_node is null\n", __func__);
@@ -245,7 +270,6 @@ static struct platform_driver bcm43xx_bluetooth_platform_driver = {
 
 static int __init bcm43xx_bluetooth_init(void)
 {
-	bt_enabled = false;
 	return platform_driver_register(&bcm43xx_bluetooth_platform_driver);
 }
 
