@@ -719,24 +719,6 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 		.private = &mss,
 	};
 
-	int ret = 0;
-	bool rollup_mode;
-	bool last_vma = false;
-
-	if (priv->rollup) {
-		rollup_mode = true;
-		mss = priv->rollup;
-		if (mss->first) {
-			mss->first_vma_start = vma->vm_start;
-			mss->first = false;
-		}
-		last_vma = !m_next_vma(priv, vma);
-	} else {
-		rollup_mode = false;
-		memset(&mss_stack, 0, sizeof mss_stack);
-		mss = &mss_stack;
-	}
-
 	memset(&mss, 0, sizeof mss);
 	/* mmap_sem is held in m_start */
 	walk_page_vma(vma, &smaps_walk);
